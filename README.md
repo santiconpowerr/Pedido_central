@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # PedidoCentral · Cocina oculta El Cairo (Django)
 
 Proyecto Django 5.2 sobre MySQL 8. Usa tu base `pedidocentral` tal cual (tablas, triggers y procedimientos del `.sql`); Django se conecta a esas tablas y la interfaz web consume una API JSON del mismo proyecto.
@@ -57,3 +58,6 @@ No hace falta `migrate`: las tablas las crea el `.sql` y las sesiones van en una
 - Build: `pip install -r requirements.txt && python manage.py collectstatic --noinput`
 - Inicio: `gunicorn config.wsgi`
 - Nunca subas `.env` a GitHub. Cambia las claves de los usuarios demo.
+=======
+# Pedido_central
+>>>>>>> origin/main
