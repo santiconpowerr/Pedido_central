@@ -58,7 +58,7 @@
   function iniciar() {
     S.view = TABS[S.user.rol][0][0];
     $("app").innerHTML =
-      '<header class="top"><div class="in"><div class="logo"><i>🍔</i><div>PedidoCentral<small>Cocina oculta El Cairo</small></div></div><div class="sp"></div>' +
+      '<header class="top"><div class="in"><div class="logo"><img src="/static/pedidos/logo.png" alt="PedidoCentral"><div>PedidoCentral<small>Cocina oculta El Cairo</small></div></div><div class="sp"></div>' +
       '<div class="me"><div><b>' + esc(S.user.nombre) + '</b><span>' + esc(S.user.rol) + '</span></div><button class="btn sm sec" data-a="salir">Salir</button></div></div></header>' +
       '<div class="wrap"><div class="stats" id="stats"></div><nav class="tabs" id="tabs"></nav><main id="main"></main></div>';
     renderTabs(); renderMain(); refresh(true);

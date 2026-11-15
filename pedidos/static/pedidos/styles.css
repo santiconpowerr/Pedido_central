@@ -28,7 +28,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .top { position: sticky; top: 0; z-index: 5; background: var(--card); border-bottom: 1px solid var(--line); }
 .top .in { max-width: 1180px; margin: auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.01em; }
-.logo i { width: 30px; height: 30px; border-radius: 9px; background: var(--sun); display: grid; place-items: center; font-style: normal; font-size: 17px; }
+.logo img { width: 30px; height: 30px; object-fit: contain; }
 .logo small { display: block; font-size: 12px; font-weight: 600; color: var(--mu); letter-spacing: 0; margin-top: -2px; }
 .sp { flex: 1; }
 .me { display: flex; align-items: center; gap: 10px; font-size: 14px; }
@@ -111,3 +111,4 @@ td.n, th.n { text-align: right; }
 
 #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; max-width: 92vw; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
 #toast.on { opacity: 1; }
+.logo img { display: block; border-radius: 9px; }
