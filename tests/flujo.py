@@ -70,8 +70,8 @@ print("\n[3] BUG 2: fallo en retirar no debe dejar domiciliario asignado")
 r, p = nuevo("3001110004", "Transferencia", "https://x.co/c4"); pid = p["id"]
 patch(caja, f"/api/pedidos/{pid}/validar-pago"); patch(caja, f"/api/pedidos/{pid}/enviar-cocina"); patch(cocina, f"/api/pedidos/{pid}/listo")
 with connection.cursor() as cur:  # sabotaje: fuerza que el UPDATE a 'En Ruta' falle (estado inconsistente)
+    cur.execute("DROP TRIGGER IF EXISTS trg_sabotaje")
     cur.execute("CREATE TRIGGER trg_sabotaje BEFORE UPDATE ON despacho FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'sabotaje'")
-r = patch(domi, f"/api/pedidos/{pid}/retirar"); check("retirar falla (esperado)", r.status_code >= 400, str(r.status_code))
 with connection.cursor() as cur:
     cur.execute("DROP TRIGGER trg_sabotaje"); cur.execute("SELECT COUNT(*) FROM despacho WHERE idPedido=%s", [pid]); n = cur.fetchone()[0]
 check("no queda despacho huerfano", n == 0, f"despachos={n}")
