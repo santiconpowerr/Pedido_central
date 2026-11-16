@@ -43,7 +43,7 @@ flowchart LR
 ```
 
 1. **Cajera** registra el pedido → `Registrado`.
-2. Pega el enlace del comprobante y pulsa **Validar pago** (RF-03).
+2. Pega el enlace del comprobante y pulsa **Validar pago** (RF-03). Si el pago es en **efectivo** no hace falta comprobante: se valida directamente.
 3. **Enviar a cocina** → `En Cocina`; el temporizador pasa a rojo a los 20 min (RF-04).
 4. **Cocina** pulsa **Marcar listo**.
 5. **Domiciliario**: **Salir a entregar** → `En Ruta` y luego **Marcar entregado**.
@@ -60,6 +60,8 @@ pedidos/templates  index.html (pantalla única)
 pedidos/static     app.js y styles.css (interfaz)
 pedidos/management/commands/claves.py   asigna claves a los usuarios demo
 database/          pedidocentral.sql y ajustes.sql
+tests/flujo.py     prueba de humo del flujo completo (ver "Pruebas")
+.env.example       plantilla de variables de entorno
 ```
 
 ## 🚀 Instalación
@@ -71,7 +73,9 @@ mysql -u root -p < database/pedidocentral.sql
 mysql -u root -p pedidocentral < database/ajustes.sql
 ```
 
-> ⚠️ `ajustes.sql` es necesario: agrega los 5 canales y el estado Cancelado, y permite cancelar pedidos.
+> ⚠️ `ajustes.sql` es necesario: agrega los 5 canales y el estado Cancelado, permite cancelar pedidos y permite validar pagos en efectivo sin comprobante.
+>
+> 🔄 **Si ya tenías la base creada** de una versión anterior, vuelve a ejecutar `ajustes.sql` (se puede repetir sin problema). Requiere MySQL 8.0.19+.
 
 ### 2. Ejecutar
 
@@ -79,7 +83,7 @@ mysql -u root -p pedidocentral < database/ajustes.sql
 python -m venv .venv
 .venv\Scripts\activate          # Linux/Mac: source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env          # Linux/Mac: cp .env.example .env  (completa DB_USER y DB_PASSWORD)
+copy .env.example .env          # Linux/Mac: cp .env.example .env  (completa DB_USER y DB_PASSWORD; ya trae DJANGO_DEBUG=true)
 python manage.py claves TuClave123
 python manage.py runserver
 ```
@@ -87,6 +91,18 @@ python manage.py runserver
 Abre http://127.0.0.1:8000 e ingresa con `cajera`, `cocina`, `domi` o `admin`.
 
 No hace falta `migrate`: las tablas las crea el `.sql` y las sesiones van en una cookie firmada.
+
+## 🧪 Pruebas
+
+`tests/flujo.py` recorre el flujo completo contra una base MySQL real (registrar → validar → cocina → listo → ruta → entregado), los casos de rechazo, el pago en efectivo, el límite de intentos de login y la cabecera anti-clickjacking.
+
+> ⚠️ **Borra los pedidos de la base.** Por seguridad solo corre si el nombre de la base contiene `test`.
+
+```bash
+sed 's/pedidocentral/pedidocentral_test/g' database/pedidocentral.sql | mysql -u root -p
+sed 's/pedidocentral/pedidocentral_test/g' database/ajustes.sql | mysql -u root -p pedidocentral_test
+DB_NAME=pedidocentral_test python tests/flujo.py      # Windows (PowerShell): $env:DB_NAME="pedidocentral_test"; python tests/flujo.py
+```
 
 ## 🔌 API
 
@@ -104,7 +120,9 @@ Requiere sesión y el encabezado `X-CSRFToken` en POST/PATCH.
 
 ## ☁️ Publicar (Render, Railway...)
 
-- **Variables:** `DJANGO_DEBUG=false`, `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` (con `https://`), y las `DB_*` de una base MySQL en la nube (revisa que permita triggers y procedimientos almacenados).
+- **Variables:** `DJANGO_SECRET_KEY` (obligatoria), `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` (con `https://`), y las `DB_*` de una base MySQL en la nube (revisa que permita triggers y procedimientos almacenados). `DJANGO_DEBUG` ya viene apagado por defecto; no lo actives en producción.
+- **Zona horaria:** `DB_TIME_ZONE=-05:00` (por defecto) fija la hora de Colombia en la conexión, así los reportes de "hoy" no dependen de la zona del servidor.
+- **HTTPS:** con `DEBUG` apagado se activa la redirección a HTTPS y HSTS de 1 hora (`SECURE_HSTS_SECONDS`; súbelo a `31536000` cuando todo funcione). `/api/salud` queda exento de la redirección para el health check.
 - **Build:** `pip install -r requirements.txt && python manage.py collectstatic --noinput`
 - **Inicio:** `gunicorn config.wsgi`
 

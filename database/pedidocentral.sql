@@ -107,9 +107,9 @@ CREATE TABLE pago (
   PRIMARY KEY (idPago),
   UNIQUE KEY uq_pago_pedido (idPedido),          -- 1 a 1
   KEY idx_pago_valida (idUsuarioValida),
-  -- un pago solo puede quedar validado si tiene comprobante y responsable
+  -- un pago solo puede quedar validado si tiene responsable y comprobante (el efectivo no lo requiere)
   CONSTRAINT ck_pago_validado CHECK (
-    validado = 0 OR (urlComprobante IS NOT NULL AND idUsuarioValida IS NOT NULL)
+    validado = 0 OR (idUsuarioValida IS NOT NULL AND (urlComprobante IS NOT NULL OR medioPago = 'Efectivo'))
   ),
   CONSTRAINT fk_pago_pedido  FOREIGN KEY (idPedido) REFERENCES pedido (idPedido),
   CONSTRAINT fk_pago_usuario FOREIGN KEY (idUsuarioValida) REFERENCES usuario (idUsuario)
@@ -190,9 +190,9 @@ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pago
                       WHERE idPedido = OLD.idPedido
                         AND validado = 1
-                        AND urlComprobante IS NOT NULL) THEN
+                        AND (urlComprobante IS NOT NULL OR medioPago = 'Efectivo')) THEN
         SIGNAL SQLSTATE '45000'
-          SET MESSAGE_TEXT = 'RF-03: el pago debe tener comprobante validado antes de pasar a cocina';
+          SET MESSAGE_TEXT = 'RF-03: el pago debe estar validado (con comprobante, salvo efectivo) antes de pasar a cocina';
       END IF;
     END IF;
 
@@ -268,9 +268,11 @@ END$$
 -- CU-02: la cajera (o el administrador) valida el comprobante.
 CREATE PROCEDURE sp_validar_pago(IN p_idPago INT UNSIGNED, IN p_idUsuario INT UNSIGNED)
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pago WHERE idPago = p_idPago AND urlComprobante IS NOT NULL) THEN
+  IF NOT EXISTS (SELECT 1 FROM pago
+                  WHERE idPago = p_idPago
+                    AND (urlComprobante IS NOT NULL OR medioPago = 'Efectivo')) THEN
     SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'RF-03: el pago no tiene comprobante adjunto';
+      SET MESSAGE_TEXT = 'RF-03: el pago no tiene comprobante adjunto (solo el efectivo no lo requiere)';
   END IF;
 
   UPDATE pago
