@@ -3,9 +3,8 @@
 ATENCION: BORRA todos los pedidos, clientes y pagos de la base. Por seguridad solo corre si el
 nombre de la base contiene "test". Uso (desde la raiz del proyecto):
 
-    mysql -u root -p -e "CREATE DATABASE pedidocentral_test"
-    mysql -u root -p pedidocentral_test < database/pedidocentral.sql   # (ver nota abajo)
-    mysql -u root -p pedidocentral_test < database/ajustes.sql
+        sed 's/pedidocentral/pedidocentral_test/g' database/pedidocentral.sql | mysql -u root -p
+    sed 's/pedidocentral/pedidocentral_test/g' database/ajustes.sql | mysql -u root -p pedidocentral_test
     DB_NAME=pedidocentral_test python tests/flujo.py
 
 Nota: pedidocentral.sql hace CREATE DATABASE/USE pedidocentral; para la base de pruebas cambia ese
