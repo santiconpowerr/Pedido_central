@@ -2,7 +2,8 @@
 --  PedidoCentral - Base de datos MySQL
 --  Sistema de Centralizacion y Seguimiento de Pedidos Multicanal
 --  para Cocinas Ocultas (El Cairo)
---
+--  ATENCION: este script hace DROP DATABASE pedidocentral y borra todos los datos existentes.
+
 --  Integrantes: Luis Alandete, Santiago Angulo, Fabian Hernandez
 --  Base: documento "PedidoCentral_Clase_4" (RF-01..RF-05, RNF-01/02,
 --        NEC-01..NEC-03, modulos M1..M7, clases criticas y decisiones DT)
