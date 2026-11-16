@@ -6,9 +6,9 @@
 --  Integrantes: Luis Alandete, Santiago Angulo, Fabian Hernandez
 --  Base: documento "PedidoCentral_Clase_4" (RF-01..RF-05, RNF-01/02,
 --        NEC-01..NEC-03, modulos M1..M7, clases criticas y decisiones DT)
---
 --  Motor recomendado: MySQL 8.0+ (usa CHECK, triggers y procedimientos).
 --  Uso:  mysql -u root -p < pedidocentral.sql
+--  Luego ejecutar database/ajustes.sql (5 canales, estado Cancelado y vistas de caja).
 -- =====================================================================
 
 DROP DATABASE IF EXISTS pedidocentral;
