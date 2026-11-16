@@ -3,6 +3,7 @@ import logging
 import re
 from functools import wraps
 
+from django.conf import settings
 from django.contrib.auth.hashers import check_password
 from django.core.cache import cache
 from django.db import DatabaseError, connection, transaction
@@ -89,7 +90,7 @@ def limpiar(v, mx):
 def entero(v, defecto=0):
     try:
         return int(float(v))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: '1e999' -> inf
         return defecto
 
 
@@ -107,18 +108,24 @@ def salud(request):
 
 @api(publico=True, metodos=("POST",))
 def login(request):
-    clave_cache = "login:" + request.META.get("REMOTE_ADDR", "?")
-    n = cache.get(clave_cache, 0)
-    if n >= 8:
-        raise HttpErr("Demasiados intentos, espera un minuto", 429)
-    cache.set(clave_cache, n + 1, 60)
-
     b = cuerpo(request)
-    u = Usuario.objects.select_related("rol").filter(username=str(b.get("username", "")), activo=True).first()
+    username = str(b.get("username", ""))
+    # Intentos fallidos por IP + usuario (no por IP sola: detras de un proxy todos comparten IP,
+    # y 8 intentos de cualquiera bloquearian a todos). Solo cuentan los fallos.
+    clave_cache = "login:%s:%s" % (request.META.get("REMOTE_ADDR", "?"), username.lower()[:40])
+    fallos = cache.get(clave_cache, 0)
+    if fallos >= 8:
+        raise HttpErr("Demasiados intentos, espera un minuto", 429)
+
+    u = Usuario.objects.select_related("rol").filter(username=username, activo=True).first()
     if u and u.password_hash == "CAMBIAR_POR_HASH":
-        raise HttpErr("Este usuario aún no tiene clave. Ejecuta: python manage.py claves TuClave123", 403)
-    if not u or not check_password(str(b.get("password", "")), u.password_hash):
+        log.warning("El usuario %s no tiene clave: ejecuta 'python manage.py claves <clave>'", u.username)
+        if settings.DEBUG:  # en produccion no se revela que el usuario existe
+            raise HttpErr("Este usuario aún no tiene clave. Ejecuta: python manage.py claves TuClave123", 403)
+    if not u or u.password_hash == "CAMBIAR_POR_HASH" or not check_password(str(b.get("password", "")), u.password_hash):
+        cache.set(clave_cache, fallos + 1, 60)
         raise HttpErr("Usuario o clave incorrectos", 401)
+    cache.delete(clave_cache)
 
     usuario = {"id": u.id, "nombre": u.nombre, "rol": u.rol.nombre}
     request.session.cycle_key()
@@ -185,7 +192,7 @@ def validar(b):
         "medio": limpiar(b.get("medioPago"), 30) or "Transferencia",
         "url": limpiar(b.get("urlComprobante"), 500),
         "items": [{"producto": limpiar(i.get("producto"), 100), "cantidad": entero(i.get("cantidad")),
-                   "subtotal": entero(i.get("subtotal"))} for i in items[:30] if isinstance(i, dict)],
+                   "subtotal": entero(i.get("subtotal"), -1)} for i in items[:30] if isinstance(i, dict)],
     }
     e = []
     if d["canal"] not in CANALES: e.append("canal inválido")
@@ -269,12 +276,35 @@ def _despachador(pid):
 
 
 def _retirar(request, pid):
-    uid, actual = request.u["id"], _despachador(pid)
-    if actual is None:
-        llamar("sp_asignar_domiciliario", [pid, uid])
-    elif actual != uid:
-        raise HttpErr("Este pedido ya lo tiene otro domiciliario", 409)
-    llamar("sp_retirar_pedido", [pid, uid])
+    """Asigna (si hace falta) y retira el pedido.
+
+    - Un candado por pedido evita que dos domiciliarios lo tomen a la vez.
+    - Los procedimientos hacen COMMIT por dentro, asi que transaction.atomic() no sirve aqui:
+      si el retiro falla, se deshace a mano la asignacion recien creada para no dejar un
+      despacho huerfano."""
+    uid = request.u["id"]
+    candado = "pedidocentral:retirar:%d" % pid
+    with connection.cursor() as cur:
+        cur.execute("SELECT GET_LOCK(%s, 5)", [candado])
+        if cur.fetchone()[0] != 1:
+            raise HttpErr("El pedido se está procesando, intenta de nuevo", 409)
+    try:
+        actual = _despachador(pid)
+        if actual is not None and actual != uid:
+            raise HttpErr("Este pedido ya lo tiene otro domiciliario", 409)
+        asignado_ahora = actual is None
+        if asignado_ahora:
+            llamar("sp_asignar_domiciliario", [pid, uid])
+        try:
+            llamar("sp_retirar_pedido", [pid, uid])
+        except DatabaseError:
+            if asignado_ahora:
+                with connection.cursor() as cur:
+                    cur.execute("DELETE FROM despacho WHERE idPedido = %s AND fechaSalida IS NULL", [pid])
+            raise
+    finally:
+        with connection.cursor() as cur:
+            cur.execute("SELECT RELEASE_LOCK(%s)", [candado])
 
 
 def _entregar(request, pid):

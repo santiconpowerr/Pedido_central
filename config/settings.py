@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
+# Seguro por defecto: si se olvida la variable en produccion, DEBUG queda apagado.
+# En desarrollo local pon DJANGO_DEBUG=true en tu .env.
+DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or ("clave-solo-para-desarrollo" if DEBUG else "")
 if not SECRET_KEY:
     raise RuntimeError("Define DJANGO_SECRET_KEY en .env (obligatoria con DJANGO_DEBUG=false).")
@@ -30,6 +32,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -41,7 +44,10 @@ TEMPLATES = [{
     "OPTIONS": {"context_processors": []},
 }]
 
-_db_options = {"charset": "utf8mb4"}
+# La hora de Colombia en la sesion de MySQL: NOW()/CURDATE() de los reportes y "ventas de hoy"
+# no deben depender de la zona horaria del servidor (en la nube suele ser UTC).
+_db_options = {"charset": "utf8mb4",
+               "init_command": "SET time_zone='%s'" % os.environ.get("DB_TIME_ZONE", "-05:00")}
 if os.environ.get("DB_SSL_CA"):
     _db_options["ssl"] = {"ca": os.environ["DB_SSL_CA"]}
 
@@ -69,6 +75,19 @@ SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+X_FRAME_OPTIONS = "DENY"  # la app no debe poder incrustarse en un iframe ajeno
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "true").lower() == "true"
+    SECURE_REDIRECT_EXEMPT = [r"^api/salud$"]  # el health check de la plataforma puede ir por http
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "3600"))  # sube a 31536000 cuando todo funcione
+
+# Cache en archivos: la comparten todos los workers de gunicorn (la de memoria es una por proceso).
+CACHES = {"default": {
+    "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+    "LOCATION": os.environ.get("CACHE_DIR", str(BASE_DIR / ".django_cache")),
+}}
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"

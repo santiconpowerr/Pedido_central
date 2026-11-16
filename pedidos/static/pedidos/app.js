@@ -132,7 +132,7 @@
     if (o.estado === "Entregado") return "Entregado";
     if (o.estado === "En Ruta") return "En camino" + (o.domiciliario ? " · " + o.domiciliario : "");
     if (o.estado === "En Cocina") return o.estadoPreparacion === "Listo" ? "Listo para recoger" : "En preparación";
-    return o.pagoValidado ? "Pago validado · listo para enviar a cocina" : o.urlComprobante ? "Comprobante por validar" : "Esperando comprobante de pago";
+    return o.pagoValidado ? "Pago validado · listo para enviar a cocina" : o.urlComprobante ? "Comprobante por validar" : o.medioPago === "Efectivo" ? "Efectivo por confirmar" : "Esperando comprobante de pago";
   }
   function paso(o) {
     if (o.estado === "Entregado") return 4;
@@ -152,7 +152,7 @@
     var b = "", pagoBox = "";
 
     if (caja && o.estado === "Registrado") {
-      if (!o.pagoValidado && !o.urlComprobante) pagoBox = '<div class="pago"><input data-c="' + o.id + '" type="url" placeholder="Enlace del comprobante"><button class="btn sm" data-a="comprobante" data-id="' + o.id + '">Guardar</button></div>';
+      if (!o.pagoValidado && !o.urlComprobante && o.medioPago !== "Efectivo") pagoBox = '<div class="pago"><input data-c="' + o.id + '" type="url" placeholder="Enlace del comprobante"><button class="btn sm" data-a="comprobante" data-id="' + o.id + '">Guardar</button></div>';
       else if (!o.pagoValidado) b += btn("validar-pago", "Validar pago", o.id, "ok");
       else b += btn("enviar-cocina", "Enviar a cocina", o.id);
     }

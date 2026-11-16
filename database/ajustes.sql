@@ -38,9 +38,9 @@ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pago
                       WHERE idPedido = OLD.idPedido
                         AND validado = 1
-                        AND urlComprobante IS NOT NULL) THEN
+                        AND (urlComprobante IS NOT NULL OR medioPago = 'Efectivo')) THEN
         SIGNAL SQLSTATE '45000'
-          SET MESSAGE_TEXT = 'RF-03: el pago debe tener comprobante validado antes de pasar a cocina';
+          SET MESSAGE_TEXT = 'RF-03: el pago debe estar validado (con comprobante, salvo efectivo) antes de pasar a cocina';
       END IF;
     END IF;
 
@@ -53,6 +53,32 @@ BEGIN
       END IF;
     END IF;
   END IF;
+END$$
+DELIMITER ;
+
+-- 3b. Efectivo: no exige comprobante (RF-03). Se recrean la restriccion CHECK y el procedimiento
+--     para bases ya creadas. (DROP CONSTRAINT en CHECK requiere MySQL 8.0.19+ o MariaDB 10.2+.)
+ALTER TABLE pago DROP CONSTRAINT ck_pago_validado;
+ALTER TABLE pago ADD CONSTRAINT ck_pago_validado CHECK (
+  validado = 0 OR (idUsuarioValida IS NOT NULL AND (urlComprobante IS NOT NULL OR medioPago = 'Efectivo'))
+);
+
+DROP PROCEDURE IF EXISTS sp_validar_pago;
+DELIMITER $$
+CREATE PROCEDURE sp_validar_pago(IN p_idPago INT UNSIGNED, IN p_idUsuario INT UNSIGNED)
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pago
+                  WHERE idPago = p_idPago
+                    AND (urlComprobante IS NOT NULL OR medioPago = 'Efectivo')) THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'RF-03: el pago no tiene comprobante adjunto (solo el efectivo no lo requiere)';
+  END IF;
+
+  UPDATE pago
+     SET validado = 1,
+         idUsuarioValida = p_idUsuario,
+         fechaValidacion = NOW()
+   WHERE idPago = p_idPago;
 END$$
 DELIMITER ;
 
