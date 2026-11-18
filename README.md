@@ -43,7 +43,7 @@ flowchart LR
 ```
 
 1. **Cajera** registra el pedido → `Registrado`.
-2. Pega el enlace del comprobante y pulsa **Validar pago** (RF-03). Si el pago es en **efectivo** no hace falta comprobante: se valida directamente.
+2. Pega la foto del comprobante y pulsa **Validar pago** (RF-03). Si el pago es en **efectivo** no hace falta comprobante: se valida directamente.
 3. **Enviar a cocina** → `En Cocina`; el temporizador pasa a rojo a los 20 min (RF-04).
 4. **Cocina** pulsa **Marcar listo**.
 5. **Domiciliario**: **Salir a entregar** → `En Ruta` y luego **Marcar entregado**.
