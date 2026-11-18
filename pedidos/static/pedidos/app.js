@@ -43,12 +43,14 @@
     if (habia) fetch("/api/logout", { method: "POST", headers: { "X-CSRFToken": csrf() }, credentials: "same-origin" });
   }
   function renderLogin() {
-    $("app").innerHTML = '<div class="login"><section class="panel"><h1>PedidoCentral</h1><p>Cocina oculta El Cairo</p>' +
+    $("app").innerHTML = '<div class="login"><aside class="login-brand"><img src="/static/pedidos/logo.png" alt=""><h2>PedidoCentral</h2><p>Cocina oculta El Cairo</p></aside>' +
+      '<section class="login-box"><h1>Entra a tu turno</h1><p class="sub">Usa el usuario y la clave que te dio el administrador.</p>' +
       '<form id="lf"><label for="u">Usuario</label><input id="u" autocomplete="username" required>' +
       '<label for="pw">Clave</label><input id="pw" type="password" autocomplete="current-password" required>' +
       '<button class="btn big" type="submit">Entrar</button></form></section></div>';
     $("u").focus();
   }
+
   async function entrar() {
     try {
       var d = await api("/login", { method: "POST", body: { username: $("u").value.trim(), password: $("pw").value } });
@@ -57,9 +59,10 @@
   }
   function iniciar() {
     S.view = TABS[S.user.rol][0][0];
+    var ini = String(S.user.nombre || "?").trim().charAt(0).toUpperCase();
     $("app").innerHTML =
-      '<header class="top"><div class="in"><div class="logo"><img src="/static/pedidos/logo.png" alt="PedidoCentral"><div>PedidoCentral<small>Cocina oculta El Cairo</small></div></div><div class="sp"></div>' +
-      '<div class="me"><div><b>' + esc(S.user.nombre) + '</b><span>' + esc(S.user.rol) + '</span></div><button class="btn sm sec" data-a="salir">Salir</button></div></div></header>' +
+      '<header class="top"><div class="in"><div class="logo"><img src="/static/pedidos/logo.png" alt="PedidoCentral"><div><b>PedidoCentral</b><small>Cocina oculta El Cairo</small></div></div><div class="sp"></div>' +
+      '<div class="me"><span class="av" aria-hidden="true">' + esc(ini) + '</span><div><b>' + esc(S.user.nombre) + '</b><span>' + esc(S.user.rol) + '</span></div><button class="btn sm ghost" data-a="salir">Salir</button></div></div></header>' +
       '<div class="wrap"><div class="stats" id="stats"></div><nav class="tabs" id="tabs"></nav><main id="main"></main></div>';
     renderTabs(); renderMain(); refresh(true);
     clearInterval(timer); timer = setInterval(function () { refresh(false); }, 15000);
@@ -75,7 +78,7 @@
     try {
       var r = await Promise.all([api("/pedidos"), api("/resumen"), S.view === "caja" ? api("/reportes") : null]);
       S.pedidos = r[0]; S.resumen = r[1]; if (r[2]) S.rep = r[2];
-      renderStats();
+      renderStats(); renderTabs();
       if (force || !typing()) fill();
     } catch (e) { if (e.status !== 401) toast(e.message); }
   }
@@ -87,15 +90,25 @@
   /* ---------- Vistas ---------- */
   function renderStats() {
     var r = S.resumen || {};
-    var t = [["Por enviar a cocina", r.porEnviar], ["En cocina", r.enCocina], ["En reparto", r.enReparto]];
-    if (r.ventasHoy != null) t.push(["Ventas de hoy", money(r.ventasHoy)]);
-    $("stats").innerHTML = t.map(function (s) { return '<div class="stat"><b>' + (s[1] == null ? 0 : s[1]) + "</b><span>" + s[0] + "</span></div>"; }).join("");
+    var t = [["Por enviar a cocina", r.porEnviar, "reg"], ["En cocina", r.enCocina, "coc"], ["En reparto", r.enReparto, "ruta"]];
+    if (r.ventasHoy != null) t.push(["Ventas de hoy", money(r.ventasHoy), "ventas"]);
+    $("stats").innerHTML = t.map(function (s) { return '<div class="stat t-' + s[2] + '"><b>' + (s[1] == null ? 0 : s[1]) + "</b><span>" + s[0] + "</span></div>"; }).join("");
+  }
+  function pendientes(v) {
+    return S.pedidos.filter(function (o) {
+      if (v === "enc") return o.estado === "Registrado";
+      if (v === "coc") return o.estado === "En Cocina" && o.estadoPreparacion === "Pendiente";
+      if (v === "dom") return (o.estado === "En Cocina" && o.estadoPreparacion === "Listo") || o.estado === "En Ruta";
+      return false;
+    }).length;
   }
   function renderTabs() {
     $("tabs").innerHTML = TABS[S.user.rol].map(function (t) {
-      return '<button class="' + (S.view === t[0] ? "on" : "") + '" data-a="tab" data-v="' + t[0] + '">' + t[1] + "</button>";
+      var n = pendientes(t[0]);
+      return '<button class="' + (S.view === t[0] ? "on" : "") + '" data-a="tab" data-v="' + t[0] + '">' + t[1] + (n ? ' <span class="badge">' + n + "</span>" : "") + "</button>";
     }).join("");
   }
+
   function renderMain() {
     var m = $("main");
     if (S.view === "enc") {
@@ -111,26 +124,35 @@
       $("lista").innerHTML = S.pedidos.length ? S.pedidos.map(card).join("") : '<p class="empty">Aún no hay pedidos. Registra el primero con el formulario.</p>';
     } else if (S.view === "coc") {
       $("cols").innerHTML =
-        col("En preparación", sel("En Cocina", "Pendiente"), "No hay pedidos en cocina.") +
-        col("Listos para recoger", sel("En Cocina", "Listo"), "Nada esperando al domiciliario.");
+        col("En preparación", sel("En Cocina", "Pendiente"), "No hay pedidos en cocina.", "coc") +
+        col("Listos para recoger", sel("En Cocina", "Listo"), "Nada esperando al domiciliario.", "ok");
     } else if (S.view === "dom") {
       $("cols").innerHTML =
-        col("Listos para recoger", sel("En Cocina", "Listo"), "Aún no hay pedidos listos.") +
-        col("En camino", sel("En Ruta"), "No hay entregas en curso.");
+        col("Listos para recoger", sel("En Cocina", "Listo"), "Aún no hay pedidos listos.", "ok") +
+        col("En camino", sel("En Ruta"), "No hay entregas en curso.", "ruta");
     } else if (S.view === "caja") cajaHtml();
   }
   function sel(estado, prep) {
     return S.pedidos.filter(function (o) { return o.estado === estado && (!prep || o.estadoPreparacion === prep); })
       .sort(function (a, b) { return b.minutos - a.minutos; });
   }
-  function col(t, arr, vacio) {
-    return '<section class="panel"><h2>' + t + ' <span class="count">' + arr.length + "</span></h2>" + (arr.length ? arr.map(card).join("") : '<p class="empty">' + vacio + "</p>") + "</section>";
+  function col(t, arr, vacio, tono) {
+    return '<section class="panel lane t-' + tono + '"><h2>' + t + ' <span class="count">' + arr.length + "</span></h2>" + (arr.length ? arr.map(card).join("") : '<p class="empty">' + vacio + "</p>") + "</section>";
   }
+
+  var ICO = {
+    pin: '<path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+    tel: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+    nota: '<path d="M5 4h14v12l-4 4H5z"/><path d="M15 20v-4h4"/>',
+    pago: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/>'
+  };
+  function ico(n) { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICO[n] + "</svg>"; }
+  var PASOS = ["Pago", "Cocina", "Listo", "Ruta", "Entrega"];
 
   function estadoTxt(o) {
     if (o.estado === "Cancelado") return "Cancelado";
     if (o.estado === "Entregado") return "Entregado";
-    if (o.estado === "En Ruta") return "En camino" + (o.domiciliario ? " · " + o.domiciliario : "");
+    if (o.estado === "En Ruta") return "En camino" + (o.domiciliario ? " con " + o.domiciliario : "");
     if (o.estado === "En Cocina") return o.estadoPreparacion === "Listo" ? "Listo para recoger" : "En preparación";
     return o.pagoValidado ? "Pago validado, listo para enviar a cocina" : o.urlComprobante ? "Comprobante por validar" : "Esperando comprobante de pago";
   }
@@ -170,18 +192,21 @@
     }
     if (caja && (o.estado === "Registrado" || o.estado === "En Cocina")) b += btn("cancelar", "Cancelar", o.id, "sec");
 
-    var items = o.items.map(function (i) { return "<li><span>" + i.cantidad + " × " + esc(i.producto) + "</span><span>" + money(i.subtotal) + "</span></li>"; }).join("");
-    var pago = esc(o.medioPago || "—") + " · " + (o.pagoValidado ? "validado ✓" : "por validar") +
-      (o.urlComprobante ? ' · <a href="' + esc(o.urlComprobante) + '" target="_blank" rel="noopener noreferrer">Ver comprobante</a>' : "");
+    var items = o.items.map(function (i) { return '<li><span class="q">' + i.cantidad + '×</span><span class="p">' + esc(i.producto) + '</span><span class="m">' + money(i.subtotal) + "</span></li>"; }).join("");
+    var link = /^https?:\/\//i.test(o.urlComprobante || "");
+    var pago = '<div class="mt">' + ico("pago") + "<span>" + esc(o.medioPago || "Sin medio de pago") + ' <em class="mini ' + (o.pagoValidado ? "ok" : "warn") + '">' + (o.pagoValidado ? "Validado" : "Por validar") + "</em>" +
+      (link ? ' <a href="' + esc(o.urlComprobante) + '" target="_blank" rel="noopener noreferrer">Ver comprobante</a>' : "") + "</span></div>";
     var p = paso(o);
-    var prog = off ? "" : '<div class="prog' + (o.estado === "Entregado" ? " done" : "") + '">' + [0, 1, 2, 3, 4].map(function (k) { return '<i class="' + (k <= p ? "f" : "") + '"></i>'; }).join("") + "</div>";
+    var prog = off ? "" : '<ol class="track">' + PASOS.map(function (n, k) { return '<li class="' + (k <= p ? "f" : "") + (k === p ? " cur" : "") + '"><i></i>' + n + "</li>"; }).join("") + "</ol>";
 
-    return '<article class="ticket' + (late ? " late" : "") + (off ? " off" : "") + '" style="--ch:' + (COL[o.canal] || "#6b665a") + '"><div class="tb">' +
-      '<div class="th"><span class="num">#' + o.id + '</span><span class="chip">' + esc(o.canal) + "</span></div>" +
-      '<div class="who">' + esc(o.nombre) + '</div><div class="state">' + esc(estadoTxt(o)) + "</div>" +
+    return '<article class="ticket t-' + tono(o) + (late ? " late" : "") + (off ? " off" : "") + '" style="--ch:' + (COL[o.canal] || "#6b665a") + '"><div class="tb">' +
+      '<div class="th"><span class="num">#' + o.id + '</span><span class="chip"><i></i>' + esc(o.canal) + "</span></div>" +
+      '<div class="who">' + esc(o.nombre) + '</div><div class="state"><span class="pill">' + esc(estadoTxt(o)) + "</span></div>" +
       '<ul class="items">' + items + '</ul><div class="total"><span>Total</span><span>' + money(o.total) + "</span></div>" +
-      '<div class="meta">Dirección: ' + esc(o.direccion) + "<br>Teléfono: " + esc(o.telefono) + (o.notas ? "<br>Nota: " + esc(o.notas) : "") + "<br>Pago: " + pago + "</div>" +
-      pagoBox + prog + "</div>" +
+      '<div class="mt">' + ico("pin") + "<span>" + esc(o.direccion) + "</span></div>" +
+      '<div class="mt">' + ico("tel") + "<span>" + esc(o.telefono) + "</span></div>" +
+      (o.notas ? '<div class="mt">' + ico("nota") + "<span>" + esc(o.notas) + "</span></div>" : "") +
+      pago + pagoBox + prog + "</div>" +
       '<div class="tf"><span class="when' + (late ? " l" : "") + '">' + when + "</span>" + (b ? '<span class="row" style="margin:0">' + b + "</span>" : "") + "</div></article>";
   }
 
@@ -238,10 +263,13 @@
   }
   function cajaHtml() {
     var r = S.rep; if (!r) { $("caja").innerHTML = '<p class="empty">Cargando…</p>'; return; }
+    var mx = function (a, k) { return Math.max.apply(null, a.map(function (x) { return Number(x[k]) || 0; }).concat(1)); };
+    var bar = function (v, max, c) { return '<i class="bar" style="width:' + Math.round((Number(v) || 0) / max * 100) + "%" + (c ? ";background:" + c : "") + '"></i>'; };
+    var md = mx(r.dias, "total"), mc = mx(r.canales, "ventas");
     $("caja").innerHTML = '<div class="cols">' +
-      '<section class="panel"><h2>Ventas por día</h2>' + tabla([["Día"], ["Pedidos", 1], ["Total", 1]], r.dias.map(function (d) { return "<tr><td>" + esc(d.dia) + '</td><td class="n">' + d.pedidos + '</td><td class="n">' + money(d.total) + "</td></tr>"; }), "Aún no hay ventas con pago validado.") + "</section>" +
-      '<section class="panel"><h2>Por canal</h2>' + tabla([["Canal"], ["Pedidos", 1], ["Ventas", 1]], r.canales.map(function (c) { return "<tr><td>" + esc(c.canal) + '</td><td class="n">' + c.pedidos + '</td><td class="n">' + money(c.ventas) + "</td></tr>"; }), "Sin pedidos.") + "</section>" +
-      '<section class="panel"><h2>Sin pago validado <span class="count">' + r.sinPago.length + "</span></h2>" + tabla([["#"], ["Cliente"], ["Estado"], ["Total", 1]], r.sinPago.map(function (p) { return "<tr><td>" + p.id + "</td><td>" + esc(p.cliente) + "</td><td>" + esc(p.estado) + (p.tieneComprobante ? "" : " · sin comprobante") + '</td><td class="n">' + money(p.total) + "</td></tr>"; }), "Todo el dinero está validado.") + "</section></div>";
+      '<section class="panel"><h2>Ventas por día</h2>' + tabla([["Día"], ["Pedidos", 1], ["Total", 1]], r.dias.map(function (d) { return "<tr><td>" + esc(d.dia) + '</td><td class="n">' + d.pedidos + '</td><td class="n">' + money(d.total) + bar(d.total, md) + "</td></tr>"; }), "Aún no hay ventas con pago validado.") + "</section>" +
+      '<section class="panel"><h2>Por canal</h2>' + tabla([["Canal"], ["Pedidos", 1], ["Ventas", 1]], r.canales.map(function (c) { return "<tr><td>" + esc(c.canal) + '</td><td class="n">' + c.pedidos + '</td><td class="n">' + money(c.ventas) + bar(c.ventas, mc, COL[c.canal]) + "</td></tr>"; }), "Sin pedidos.") + "</section>" +
+      '<section class="panel"><h2>Sin pago validado <span class="count">' + r.sinPago.length + "</span></h2>" + tabla([["#"], ["Cliente"], ["Estado"], ["Total", 1]], r.sinPago.map(function (p) { return "<tr><td>" + p.id + "</td><td>" + esc(p.cliente) + "</td><td>" + esc(p.estado) + (p.tieneComprobante ? "" : " (sin comprobante)") + '</td><td class="n">' + money(p.total) + "</td></tr>"; }), "Todo el dinero está validado.") + "</section></div>";
   }
 
   /* ---------- Eventos ---------- */
