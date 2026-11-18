@@ -1,18 +1,18 @@
 import json
 import logging
 import re
+import uuid
 from functools import wraps
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password
 from django.core.cache import cache
 from django.db import DatabaseError, connection, transaction
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from django.middleware.csrf import rotate_token
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
-
-from .models import Cliente, DetallePedido, Pago, Pedido, Usuario
 
 log = logging.getLogger(__name__)
 
@@ -352,6 +352,64 @@ def historial(request, pid):
         """SELECT h.estadoAnterior, h.estadoNuevo, DATE_FORMAT(h.fechaHora, '%%d/%%m %%H:%%i') AS fecha, u.nombre AS usuario
              FROM historial_estado_pedido h LEFT JOIN usuario u ON u.idUsuario = h.idUsuario
             WHERE h.idPedido = %s ORDER BY h.idHistorial""", [pid]), safe=False)
+
+
+# ---------------------------------------------------------------- Foto del comprobante
+# Las fotos se guardan en la carpeta "comprobantes" (junto a manage.py), fuera de las carpetas públicas:
+# solo se pueden ver con la sesión iniciada. En la base de datos se guarda la ruta en pago.urlComprobante.
+CARPETA_FOTOS = Path(getattr(settings, "BASE_DIR", Path(__file__).resolve().parent.parent)) / "comprobantes"
+RUTA_FOTOS = "/api/comprobantes/"
+MAX_FOTO = 5 * 1024 * 1024
+TIPOS_FOTO = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+
+
+def extension_imagen(datos):
+    """Detecta el formato por el contenido real del archivo, no por su nombre."""
+    if datos[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if datos[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if datos[:4] == b"RIFF" and datos[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+@api((CAJA, ADMIN), ("POST",))
+def subir_foto(request, pid):
+    f = request.FILES.get("foto")
+    if not f:
+        raise HttpErr("Selecciona la foto del comprobante")
+    if f.size > MAX_FOTO:
+        raise HttpErr("La foto pesa más de 5 MB")
+    datos = f.read()
+    ext = extension_imagen(datos)
+    if not ext:
+        raise HttpErr("Sube la foto en formato JPG, PNG o WEBP")
+    pg = Pago.objects.filter(pedido_id=pid, validado=False).first()
+    if not pg:
+        raise HttpErr("El pago no existe o ya fue validado", 409)
+
+    CARPETA_FOTOS.mkdir(exist_ok=True)
+    nombre = uuid.uuid4().hex + "." + ext
+    (CARPETA_FOTOS / nombre).write_bytes(datos)
+    Pago.objects.filter(pk=pg.pk).update(url_comprobante=RUTA_FOTOS + nombre)
+
+    anterior = pg.url_comprobante or ""
+    if anterior.startswith(RUTA_FOTOS):  # borra la foto que se reemplazó
+        (CARPETA_FOTOS / Path(anterior).name).unlink(missing_ok=True)
+    return JsonResponse(listar("p.idPedido = %s", [pid], 1)[0])
+
+
+@api()
+def ver_comprobante(request, archivo):
+    ruta = CARPETA_FOTOS / Path(archivo).name  # Path(...).name evita rutas como ../
+    tipo = TIPOS_FOTO.get(ruta.suffix[1:])
+    if ruta.name != archivo or not tipo or not ruta.is_file():
+        raise HttpErr("Foto no encontrada", 404)
+    resp = FileResponse(open(ruta, "rb"), content_type=tipo)
+    resp["X-Content-Type-Options"] = "nosniff"
+    resp["Cache-Control"] = "private, max-age=86400"
+    return resp
 
 
 # ---------------------------------------------------------------- Resumen y reportes

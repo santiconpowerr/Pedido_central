@@ -10,7 +10,7 @@
     "Auxiliar de Cocina": [["coc", "Cocina"]],
     "Domiciliario": [["dom", "Reparto"]]
   };
-    var S = { user: null, view: null, pedidos: [], resumen: null, rep: null, payload: null };
+  var S = { user: null, view: null, pedidos: [], resumen: null, rep: null, payload: null };
   var timer = null;
 
   var $ = function (id) { return document.getElementById(id); };
@@ -43,7 +43,7 @@
     if (habia) fetch("/api/logout", { method: "POST", headers: { "X-CSRFToken": csrf() }, credentials: "same-origin" });
   }
   function renderLogin() {
-    $("app").innerHTML = '<div class="login"><aside class="login-brand"><img src="/static/pedidos/logo.png" alt=""><h2>PedidoCentral</h2><p>Cocina oculta El Cairo</p></aside>' +
+    $("app").innerHTML = '<div class="login"><aside class="login-brand"><img src="/static/pedidos/logo-claro.png" alt=""><h2>PedidoCentral</h2><p>Cocina oculta El Cairo</p></aside>' +
       '<section class="login-box"><h1>Entra a tu turno</h1><p class="sub">Usa el usuario y la clave que te dio el administrador.</p>' +
       '<form id="lf"><label for="u">Usuario</label><input id="u" autocomplete="username" required>' +
       '<label for="pw">Clave</label><input id="pw" type="password" autocomplete="current-password" required>' +
@@ -61,7 +61,7 @@
     S.view = TABS[S.user.rol][0][0];
     var ini = String(S.user.nombre || "?").trim().charAt(0).toUpperCase();
     $("app").innerHTML =
-      '<header class="top"><div class="in"><div class="logo"><img src="/static/pedidos/logo.png" alt="PedidoCentral"><div><b>PedidoCentral</b><small>Cocina oculta El Cairo</small></div></div><div class="sp"></div>' +
+      '<header class="top"><div class="in"><div class="logo"><img src="/static/pedidos/logo-claro.png" alt="PedidoCentral"><div><b>PedidoCentral</b><small>Cocina oculta El Cairo</small></div></div><div class="sp"></div>' +
       '<div class="me"><span class="av" aria-hidden="true">' + esc(ini) + '</span><div><b>' + esc(S.user.nombre) + '</b><span>' + esc(S.user.rol) + '</span></div><button class="btn sm ghost" data-a="salir">Salir</button></div></div></header>' +
       '<div class="wrap"><div class="stats" id="stats"></div><nav class="tabs" id="tabs"></nav><main id="main"></main></div>';
     renderTabs(); renderMain(); refresh(true);
@@ -181,8 +181,8 @@
     var b = "", pagoBox = "";
 
     if (caja && o.estado === "Registrado") {
-      if (!o.pagoValidado && !o.urlComprobante) pagoBox = '<div class="pago"><input data-c="' + o.id + '" type="url" placeholder="Enlace del comprobante" aria-label="Enlace del comprobante"><button class="btn sm" data-a="comprobante" data-id="' + o.id + '">Guardar</button></div>';
-      else if (!o.pagoValidado) b += btn("validar-pago", "Validar pago", o.id, "ok");
+      if (!o.pagoValidado && !o.urlComprobante) pagoBox = '<div class="pago">' + btn("foto", "Subir foto del pago", o.id) + "</div>";
+      else if (!o.pagoValidado) b += btn("validar-pago", "Validar pago", o.id, "ok") + btn("foto", "Cambiar foto", o.id, "sec");
       else b += btn("enviar-cocina", "Enviar a cocina", o.id);
     }
     if (coc && o.estado === "En Cocina" && o.estadoPreparacion === "Pendiente") b += btn("listo", "Marcar listo", o.id);
@@ -194,6 +194,8 @@
 
     var items = o.items.map(function (i) { return '<li><span class="q">' + i.cantidad + '×</span><span class="p">' + esc(i.producto) + '</span><span class="m">' + money(i.subtotal) + "</span></li>"; }).join("");
     var link = /^https?:\/\//i.test(o.urlComprobante || "");
+    var imgFoto = (o.urlComprobante || "").indexOf("/api/comprobantes/") === 0
+      ? '<a class="foto" href="' + esc(o.urlComprobante) + '" target="_blank" rel="noopener"><img src="' + esc(o.urlComprobante) + '" alt="Foto del comprobante de pago" loading="lazy"></a>' : "";
     var pago = '<div class="mt">' + ico("pago") + "<span>" + esc(o.medioPago || "Sin medio de pago") + ' <em class="mini ' + (o.pagoValidado ? "ok" : "warn") + '">' + (o.pagoValidado ? "Validado" : "Por validar") + "</em>" +
       (link ? ' <a href="' + esc(o.urlComprobante) + '" target="_blank" rel="noopener noreferrer">Ver comprobante</a>' : "") + "</span></div>";
     var p = paso(o);
@@ -206,7 +208,7 @@
       '<div class="mt">' + ico("pin") + "<span>" + esc(o.direccion) + "</span></div>" +
       '<div class="mt">' + ico("tel") + "<span>" + esc(o.telefono) + "</span></div>" +
       (o.notas ? '<div class="mt">' + ico("nota") + "<span>" + esc(o.notas) + "</span></div>" : "") +
-      pago + pagoBox + prog + "</div>" +
+      pago + imgFoto + pagoBox + prog + "</div>" +
       '<div class="tf"><span class="when' + (late ? " l" : "") + '">' + when + "</span>" + (b ? '<span class="row" style="margin:0">' + b + "</span>" : "") + "</div></article>";
   }
 
@@ -220,7 +222,7 @@
       '<label>Productos (cantidad · producto · subtotal)</label><div id="lines"></div><button type="button" class="link" data-a="addline">+ Agregar producto</button>' +
       '<div class="total"><span>Total</span><span id="tot">$0</span></div>' +
       '<label for="notas">Notas (opcional)</label><input id="notas" maxlength="300">' +
-      '<label for="url">Enlace del comprobante (opcional)</label><input id="url" type="url" inputmode="url" placeholder="https://...">' +
+      '<label for="foto">Foto del pago (opcional)</label><input id="foto" type="file" accept="image/*">' +
       '<div id="alerta"></div><button class="btn big" type="submit" id="guardar">Guardar pedido</button></form>';
   }
   function addLine() {
@@ -239,14 +241,19 @@
     var items = [].map.call(document.querySelectorAll("#lines .li"), function (l) {
       return { cantidad: l.querySelector(".q").value, producto: l.querySelector(".pr").value.trim(), subtotal: l.querySelector(".sb").value || 0 };
     }).filter(function (i) { return i.producto || Number(i.subtotal); });
-    return { canal: g("canal"), medioPago: g("medio"), nombre: g("nombre"), telefono: g("tel"), direccion: g("dir"), notas: g("notas"), urlComprobante: g("url"), items: items };
+    return { canal: g("canal"), medioPago: g("medio"), nombre: g("nombre"), telefono: g("tel"), direccion: g("dir"), notas: g("notas"), items: items };
   }
   async function guardar(p) {
     var b = $("guardar"); if (b) b.disabled = true;
     S.payload = p;
     try {
-      await api("/pedidos", { method: "POST", body: p });
-      S.payload = null; toast("Pedido guardado"); renderMain(); await refresh(true);
+      var nuevo = await api("/pedidos", { method: "POST", body: p });
+      var foto = S.foto; S.payload = null; S.foto = null;
+      if (foto) {
+        try { await subirFoto(nuevo.id, foto); toast("Pedido guardado con la foto del pago"); }
+        catch (e2) { toast("Pedido guardado, pero la foto no se subió: " + e2.message); }
+      } else toast("Pedido guardado");
+      renderMain(); await refresh(true);
     } catch (e) {
       if (b) b.disabled = false;
       if (e.status === 409 && e.data && e.data.duplicado) {
@@ -254,6 +261,42 @@
         $("alerta").innerHTML = '<div class="warn"><b>Posible pedido duplicado.</b> Este teléfono ya tiene el pedido #' + d.id + " activo desde hace " + d.minutos + " min (" + esc(d.canal) + ').<div class="row"><button type="button" class="btn sm" data-a="forzar">Es otro pedido, guardar</button><button type="button" class="btn sm sec" data-a="revisar">Revisar</button></div></div>';
       } else toast(e.message);
     }
+  }
+
+  /* ---------- Foto del comprobante ---------- */
+  var fg = document.createElement("input");
+  fg.type = "file"; fg.accept = "image/*"; fg.hidden = true;
+  document.body.appendChild(fg);
+  fg.addEventListener("change", async function () {
+    var f = fg.files[0], id = S.fotoPid;
+    fg.value = "";
+    if (!f || !id) return;
+    try { toast("Subiendo foto…"); await subirFoto(id, f); toast("Foto guardada"); await refresh(true); }
+    catch (e) { toast(e.message); }
+  });
+  function comprimir(file) {
+    return new Promise(function (ok) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var k = Math.min(1, 1600 / Math.max(img.width, img.height));
+        var c = document.createElement("canvas");
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        var x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { ok(b || file); }, "image/jpeg", 0.82);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); ok(file); };
+      img.src = url;
+    });
+  }
+  async function subirFoto(id, file) {
+    var fd = new FormData();
+    fd.append("foto", await comprimir(file), "comprobante.jpg");
+    var r = await fetch("/api/pedidos/" + id + "/foto", { method: "POST", headers: { "X-CSRFToken": csrf() }, credentials: "same-origin", body: fd });
+    var d = await r.json().catch(function () { return {}; });
+    if (r.status === 401 && S.user) salir();
+    if (!r.ok) throw new Error(d.error || "No se pudo subir la foto");
+    return d;
   }
 
   /* ---------- Caja (solo administrador) ---------- */
@@ -278,6 +321,7 @@
     var a = b.dataset.a, id = b.dataset.id;
     if (a === "salir") return salir();
     if (a === "tab") { S.view = b.dataset.v; renderTabs(); renderMain(); return refresh(true); }
+    if (a === "foto") { S.fotoPid = id; fg.click(); return; }
     if (a === "addline") return addLine();
     if (a === "quitar") { if (document.querySelectorAll("#lines .li").length > 1) b.parentNode.remove(); calcTotal(); return; }
     if (a === "forzar") { var p = S.payload; if (p) { p.forzar = true; guardar(p); } return; }
@@ -293,7 +337,7 @@
   document.addEventListener("submit", function (ev) {
     ev.preventDefault();
     if (ev.target.id === "lf") entrar();
-    else if (ev.target.id === "f") guardar(leerForm());
+    else if (ev.target.id === "f") { var ff = $("foto"); S.foto = ff && ff.files[0] ? ff.files[0] : null; guardar(leerForm()); }
   });
 
   /* ---------- Inicio ---------- */
