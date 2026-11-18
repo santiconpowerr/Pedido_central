@@ -14,6 +14,9 @@ from django.middleware.csrf import rotate_token
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from .models import Cliente, DetallePedido, Pago, Pedido, Usuario
+
+
 log = logging.getLogger(__name__)
 
 CANALES = ["WhatsApp", "App de domicilio", "Instagram", "Facebook", "Llamada"]
