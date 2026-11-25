@@ -16,7 +16,7 @@ from .models import Cliente, DetallePedido, Pago, Pedido, Usuario
 log = logging.getLogger(__name__)
 
 CANALES = ["WhatsApp", "App de domicilio", "Instagram", "Facebook", "Llamada"]
-MEDIOS = ["Transferencia", "Nequi", "Daviplata", "Efectivo"]
+MEDIOS = ["Transferencia", "Nequi", "Daviplata", "Efectivo", "Datáfono"]
 VENTANA_DUPLICADO_MIN = 20  # NEC-01
 ADMIN, CAJA, COCINA, DOMI = "Administrador", "Cajera", "Auxiliar de Cocina", "Domiciliario"
 
@@ -174,6 +174,34 @@ def listar(where="", params=(), limite=300):
     return rows
 
 
+def _normalizar_medio(valor):
+    m = limpiar(valor, 30)
+    if m.lower() in ("datafono", "datáfono"):
+        return "Datáfono"
+    for item in MEDIOS:
+        if item.lower() == m.lower():
+            return item
+    return m or "Transferencia"
+
+
+def _componer_observaciones(d):
+    extras = []
+    total_items = sum(i["subtotal"] for i in d["items"])
+    if d["medio"] == "Efectivo" and d["montoEfectivo"] > 0:
+        vueltas = d["montoEfectivo"] - total_items
+        extras.append(
+            f"Efectivo: paga con ${d['montoEfectivo']:,}"
+            + (f" (cambio: ${vueltas:,})" if vueltas >= 0 else " (monto menor al subtotal)")
+        )
+    elif d["medio"] == "Datáfono" and d["refPago"]:
+        extras.append(f"Datáfono ref/tarjeta: {d['refPago']}")
+    elif d["medio"] in ("Transferencia", "Nequi", "Daviplata") and d["refPago"]:
+        extras.append(f"Ref. pago: {d['refPago']}")
+
+    partes = [p for p in [d["notas"], *extras] if p]
+    return limpiar(" | ".join(partes), 300) or None
+
+
 def validar(b):
     items = b.get("items") if isinstance(b.get("items"), list) else []
     d = {
@@ -182,8 +210,10 @@ def validar(b):
         "telefono": re.sub(r"\D", "", limpiar(b.get("telefono"), 40)),
         "direccion": limpiar(b.get("direccion"), 200),
         "notas": limpiar(b.get("notas"), 300),
-        "medio": limpiar(b.get("medioPago"), 30) or "Transferencia",
+        "medio": _normalizar_medio(b.get("medioPago")),
         "url": limpiar(b.get("urlComprobante"), 500),
+        "montoEfectivo": entero(b.get("montoEfectivo"), 0),
+        "refPago": limpiar(b.get("refPago"), 80),
         "items": [{"producto": limpiar(i.get("producto"), 100), "cantidad": entero(i.get("cantidad")),
                    "subtotal": entero(i.get("subtotal"))} for i in items[:30] if isinstance(i, dict)],
     }
@@ -222,9 +252,10 @@ def crear(request):
     with transaction.atomic():
         cliente, _ = Cliente.objects.update_or_create(
             telefono=d["telefono"], defaults={"nombre": d["nombre"], "direccion": d["direccion"]})
+        obs = _componer_observaciones(d)
         ped = Pedido.objects.create(
             cliente=cliente, usuario_cajera_id=request.u["id"], canal=d["canal"],
-            direccion_entrega=d["direccion"], observaciones=d["notas"] or None)
+            direccion_entrega=d["direccion"], observaciones=obs)
         DetallePedido.objects.bulk_create(
             [DetallePedido(pedido=ped, producto=i["producto"], cantidad=i["cantidad"], subtotal=i["subtotal"])
              for i in d["items"]])  # el trigger recalcula el total del pedido
