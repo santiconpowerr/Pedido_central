@@ -443,3 +443,104 @@ def reportes(request):
         "canales": [{"canal": r["canal"], "pedidos": int(r["pedidos"]), "ventas": int(r["ventas"])} for r in canales],
         "sinPago": [{**r, "total": int(r["total"]), "tieneComprobante": bool(r["tieneComprobante"])} for r in sin_pago],
     })
+    
+# ---------------------------------------------------------------- Seguimiento para el cliente (público)
+# El cliente no tiene usuario: consulta con número de pedido + teléfono del pedido. Solo lectura, y solo
+# se devuelve lo que le sirve (etapa, horas y productos): nada de comprobante, totales ni personal.
+ETAPAS = ["Pedido recibido", "En preparación", "Salió de la tienda", "Entregado"]
+ESTADO_A_ETAPA = {"Registrado": 0, "En Cocina": 1, "En Ruta": 2, "Entregado": 3}
+MAX_FALLOS_PEDIDO = 8   # intentos fallidos por pedido y minuto (frena adivinar el teléfono de un pedido)
+MAX_FALLOS_IP = 30      # intentos fallidos por IP y minuto (frena probar pedidos con un teléfono conocido)
+
+
+@ensure_csrf_cookie
+def seguimiento_pagina(request):
+    return render(request, "pedidos/seguimiento.html")
+
+
+def _mensaje_cliente(estado, preparacion):
+    """Traduce el estado interno a lo que lee el cliente: (título, detalle)."""
+    if estado == "Cancelado":
+        return "Pedido cancelado", "Tu pedido fue cancelado. Si tienes dudas, comunícate con la tienda."
+    if estado == "Entregado":
+        return "Entregado", "Tu pedido ya fue entregado. ¡Que lo disfrutes!"
+    if estado == "En Ruta":
+        return "Ya salió de la tienda", "Tu pedido va en camino."
+    if estado == "En Cocina" and preparacion == "Listo":
+        return "Listo para salir", "Tu pedido ya está listo y espera al domiciliario."
+    if estado == "En Cocina":
+        return "En preparación", "Tu pedido se está preparando en la cocina."
+    return "Pedido recibido", "Recibimos tu pedido y lo estamos confirmando."
+
+
+@api(publico=True, metodos=("POST",))
+def seguimiento(request):
+    b = cuerpo(request)
+    pid = entero(b.get("pedido"))
+    tel = re.sub(r"\D", "", limpiar(b.get("telefono"), 40))[-10:]  # los últimos 10 dígitos: acepta +57 y espacios
+    if pid <= 0 or len(tel) < 7:
+        raise HttpErr("Escribe el número de pedido y el teléfono con el que lo hiciste")
+
+    ip = request.META.get("REMOTE_ADDR", "?")
+    k_pedido, k_ip = "seg:p:%s" % pid, "seg:ip:%s" % ip
+    f_pedido, f_ip = cache.get(k_pedido, 0), cache.get(k_ip, 0)
+    if f_pedido >= MAX_FALLOS_PEDIDO or f_ip >= MAX_FALLOS_IP:
+        raise HttpErr("Demasiados intentos, espera un minuto", 429)
+
+    rows = filas(
+        """SELECT p.estado, DATE_FORMAT(p.fechaHora, '%%H:%%i') AS hora, c.estadoPreparacion
+             FROM pedido p
+             JOIN cliente cl ON cl.idCliente = p.idCliente
+             LEFT JOIN comanda_kds c ON c.idPedido = p.idPedido
+            WHERE p.idPedido = %s AND RIGHT(cl.telefono, 10) = %s""", [pid, tel])
+    if not rows:  # mismo mensaje si el pedido no existe o el teléfono no coincide
+        cache.set(k_pedido, f_pedido + 1, 60)
+        cache.set(k_ip, f_ip + 1, 60)
+        raise HttpErr("No encontramos un pedido con esos datos", 404)
+    cache.delete(k_pedido)
+
+    r = rows[0]
+    items = filas("SELECT producto, cantidad FROM detalle_pedido WHERE idPedido = %s ORDER BY idDetalle", [pid])
+    horas = {"Registrado": r["hora"]}
+    for h in filas("SELECT estadoNuevo AS estado, DATE_FORMAT(fechaHora, '%%H:%%i') AS hora "
+                   "FROM historial_estado_pedido WHERE idPedido = %s ORDER BY idHistorial", [pid]):
+        horas[h["estado"]] = h["hora"]
+
+    titulo, detalle = _mensaje_cliente(r["estado"], r["estadoPreparacion"])
+    paso = ESTADO_A_ETAPA.get(r["estado"], -1)
+    resp = JsonResponse({
+        "pedido": pid,
+        "cancelado": r["estado"] == "Cancelado",
+        "paso": paso,
+        "titulo": titulo,
+        "detalle": detalle,
+        "pasos": [{"nombre": n, "hora": horas.get(e)} for n, e in zip(ETAPAS, ESTADO_A_ETAPA)],
+        "items": [{"producto": i["producto"], "cantidad": i["cantidad"]} for i in items],
+    })
+    resp["Cache-Control"] = "no-store"
+    return resp
+
+
+# ---------------------------------------------------------------- Menú público
+from .menu import MENU, WHATSAPP  # noqa: E402  (el menú se edita en pedidos/menu.py)
+
+
+def _precio(n):
+    return "$" + format(int(n), ",").replace(",", ".")  # 18000 -> $18.000
+
+
+def menu_pagina(request):
+    categorias = [{
+        "nombre": c.get("categoria", ""),
+        "platos": [{
+            "nombre": p.get("nombre", ""),
+            "descripcion": p.get("descripcion", ""),
+            "precio_texto": _precio(p.get("precio", 0)),
+            "disponible": p.get("disponible", True),
+        } for p in c.get("platos", [])],
+    } for c in MENU if c.get("platos")]
+    digitos = re.sub(r"\D", "", WHATSAPP or "")
+    return render(request, "pedidos/menu.html", {
+        "categorias": categorias,
+        "whatsapp_url": "https://wa.me/%s" % digitos if digitos else "",
+    })

@@ -1,0 +1,51 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sigue tu pedido · El Cairo</title>
+  <meta name="theme-color" content="#12365c">
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/png" href="{% static 'pedidos/logo-color.png' %}?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="{% static 'pedidos/seguimiento.css' %}?v=1">
+</head>
+<body>
+  <header class="top">
+    <img src="{% static 'pedidos/logo-claro.png' %}?v=2" alt="El Cairo" class="logo">
+  </header>
+
+  <main class="tarjeta">
+    <h1>Sigue tu pedido</h1>
+    <p class="sub">Escribe el número de tu pedido y el teléfono con el que lo hiciste.</p>
+
+    <form id="form" autocomplete="off" novalidate>
+      {% csrf_token %}
+      <label for="pedido">Número de pedido</label>
+      <input id="pedido" name="pedido" inputmode="numeric" placeholder="Ej: 123" maxlength="10" required>
+      <label for="telefono">Teléfono</label>
+      <input id="telefono" name="telefono" type="tel" inputmode="tel" placeholder="Ej: 300 123 4567" maxlength="20" required>
+      <button id="btn" type="submit">Consultar</button>
+      <p id="error" class="error" role="alert" hidden></p>
+    </form>
+
+    <section id="resultado" hidden aria-live="polite">
+      <div id="estado" class="estado">
+        <span id="titulo" class="titulo"></span>
+        <span id="detalle" class="detalle"></span>
+      </div>
+      <ol id="pasos" class="pasos"></ol>
+      <div class="productos">
+        <h2>Tu pedido <span id="num"></span></h2>
+        <ul id="items"></ul>
+      </div>
+      <p id="nota" class="nota"></p>
+    </section>
+    <p class="nota"><a href="/menu">Ver el menú</a></p>
+  </main>
+
+  <script src="{% static 'pedidos/seguimiento.js' %}?v=1"></script>
+</body>
+</html>

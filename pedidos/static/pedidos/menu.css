@@ -1,0 +1,13 @@
+.cat { margin-top: 22px; }
+.cat h2 { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 1.2rem; margin: 0 0 6px; padding-bottom: 6px; border-bottom: 2.5px solid var(--naranja); display: inline-block; }
+.platos { list-style: none; margin: 8px 0 0; padding: 0; }
+.plato { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px dashed var(--linea); }
+.plato:last-child { border-bottom: 0; }
+.info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nombre { font-weight: 700; }
+.desc { color: var(--gris); font-size: .9rem; }
+.precio { font-weight: 800; color: var(--azul); white-space: nowrap; }
+.plato.agotado .nombre, .plato.agotado .desc { color: var(--gris); text-decoration: line-through; }
+.plato.agotado .precio { color: var(--rojo); font-size: .85rem; }
+.btn-wa { display: block; margin-top: 26px; text-align: center; text-decoration: none; font-weight: 800; color: #fff; background: #1f9d55; border-radius: 10px; padding: 13px; }
+.nota a { color: var(--azul2); font-weight: 700; }
